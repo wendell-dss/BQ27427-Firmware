@@ -22,5 +22,6 @@
 ../Core/Src/BQ27427.c:305:26:BQ27427_ReadInternal	48	static
 ../Core/Src/BQ27427.c:317:26:BQ27427_selectDataBlock	32	static
 ../Core/Src/BQ27427.c:341:16:BQ27427_calcChecksum	32	static
-../Core/Src/BQ27427.c:410:19:BQ27427_SetDesignCapacity	264	static
-../Core/Src/BQ27427.c:528:10:BQ27427_GetDesignCapacity	48	static
+../Core/Src/BQ27427.c:410:19:BQ27427_SetDesignCapacity	288	static
+../Core/Src/BQ27427.c:559:19:BQ27427_SetChemistryProfile	64	static
+../Core/Src/BQ27427.c:617:10:BQ27427_GetDesignCapacity	48	static

@@ -338,9 +338,9 @@ static HAL_StatusTypeDef BQ27427_selectDataBlock(BQ27427_t *sensor_BQ27427, uint
 //    sum = (uint8_t)((sum - oldLsb - oldMsb + newLsb + newMsb) & 0xFF);
 //    return (uint8_t)(255 - sum);
 //}
-static uint8_t BQ27427_calcChecksum(uint8_t oldCsum, uint8_t old_msb_DC, uint8_t old_lsb_DC, uint8_t old_lsb_CTTC, uint8_t old_msb_DCT, uint8_t old_lsb_DCT, uint8_t old_msb_CCT, uint8_t old_lsb_CCT, uint8_t old_msb_QC, uint8_t old_lsb_QC, uint8_t old_msb_mWh, uint8_t old_lsb_mWh, uint8_t old_msb_TV, uint8_t old_lsb_TV, uint8_t msb_DC, uint8_t lsb_DC, uint8_t lsb_CTTC, uint8_t msb_DCT, uint8_t lsb_DCT, uint8_t msb_CCT, uint8_t lsb_CCT, uint8_t msb_QC, uint8_t lsb_QC, uint8_t msb_TV, uint8_t lsb_TV, uint8_t msb_mWh, uint8_t lsb_mWh){
+static uint8_t BQ27427_calcChecksum(uint8_t oldCsum, uint8_t old_msb_DC, uint8_t old_lsb_DC, uint8_t old_msb_CTTC, uint8_t old_lsb_CTTC, uint8_t old_msb_DCT, uint8_t old_lsb_DCT, uint8_t old_msb_CCT, uint8_t old_lsb_CCT, uint8_t old_msb_QC, uint8_t old_lsb_QC, uint8_t old_msb_mWh, uint8_t old_lsb_mWh, uint8_t old_msb_TV, uint8_t old_lsb_TV, uint8_t msb_DC, uint8_t lsb_DC, uint8_t msb_CTTC, uint8_t lsb_CTTC, uint8_t msb_DCT, uint8_t lsb_DCT, uint8_t msb_CCT, uint8_t lsb_CCT, uint8_t msb_QC, uint8_t lsb_QC, uint8_t msb_TV, uint8_t lsb_TV, uint8_t msb_mWh, uint8_t lsb_mWh){
     uint8_t old_sum = (0xFF - oldCsum) & 0xFF;
-	uint8_t new_sum = (old_sum - old_msb_DC - old_lsb_DC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + msb_DC + lsb_DC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
+	uint8_t new_sum = (old_sum - old_msb_DC - old_lsb_DC - old_msb_CTTC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + msb_DC + lsb_DC + msb_CTTC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
 	uint8_t newCsum = (0xFF - new_sum) & 0xFF;
 
     return newCsum;
@@ -407,13 +407,27 @@ static uint8_t BQ27427_calcChecksum(uint8_t oldCsum, uint8_t old_msb_DC, uint8_t
 //
 //    return HAL_OK;
 //}
-HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t capacity_mAh, uint16_t mV){
+HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t capacity_mAh, uint16_t terminate_voltage){
     HAL_StatusTypeDef ret;
     uint16_t flags;
-    uint8_t old_csum, old_msb_DC, old_lsb_DC, old_lsb_CTTC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_mWh, old_lsb_mWh, old_msb_TV, old_lsb_TV, msb_DC, lsb_DC, lsb_CTTC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV, msb_mWh, lsb_mWh;
+    uint8_t old_csum, old_msb_DC, old_lsb_DC, old_lsb_CTTC, old_msb_CTTC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_mWh, old_lsb_mWh, old_msb_TV, old_lsb_TV, msb_DC, lsb_DC, msb_CTTC, lsb_CTTC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV, msb_mWh, lsb_mWh;
     lsb_DC = (uint8_t)(capacity_mAh & 0xFF);
     msb_DC = (uint8_t)((capacity_mAh >> 8) & 0xFF);
-    uint16_t mWh = capacity_mAh*mV/1000;
+	uint16_t taper_Rate = capacity_mAh / 10;
+    lsb_CTTC =  taper_Rate       & 0xFF;
+	msb_CTTC = (taper_Rate >> 8) & 0xFF;
+    uint16_t chg_Current_Thr = capacity_mAh / 10;
+	lsb_CCT =  chg_Current_Thr       & 0xFF;
+    msb_CCT = (chg_Current_Thr >> 8) & 0xFF;
+    uint16_t dsg_Current_Thr = capacity_mAh / 16.7;
+	lsb_DCT =  dsg_Current_Thr       & 0xFF;
+    msb_DCT = (dsg_Current_Thr >> 8) & 0xFF;
+	lsb_TV =  terminate_voltage       & 0xFF;
+    msb_TV = (terminate_voltage >> 8) & 0xFF;
+    uint16_t quit_current = capacity_mAh / 25;
+	lsb_QC =  quit_current       & 0xFF;
+    msb_QC = (quit_current >> 8) & 0xFF;
+    uint16_t mWh = (capacity_mAh/100)*(terminate_voltage/100);
     lsb_mWh =  mWh       & 0xFF;
     msb_mWh = (mWh >> 8) & 0xFF;
     uint8_t newCsum;
@@ -424,7 +438,7 @@ HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t 
 
     // 2) Enter CONFIG UPDATE
     BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_CFGUPDATE);
-    HAL_Delay(1100);
+//    HAL_Delay(1100);
 
     // 3) Wait for CONFIG UPDATE flag
     do {
@@ -436,77 +450,100 @@ HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t 
     if (ret != HAL_OK) return ret;
 
     // 5) Read old LSB, MSB, checksum
-    HAL_Delay(5);
+    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_CHECKSUM, &old_csum, 1);
+    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &old_lsb_DC, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &old_msb_DC, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TAPER_RATE_LSB, &old_lsb_CTTC, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
+    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TAPER_RATE_MSB, &old_msb_CTTC, 1);
+    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_LSB, &old_lsb_DCT, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_MSB, &old_msb_DCT, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_LSB, &old_lsb_CCT, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_MSB, &old_msb_CCT, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_QUIT_CURRENT_LSB, &old_lsb_QC, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_QUIT_CURRENT_MSB, &old_msb_QC, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
+    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_mWH_LSB, &old_lsb_mWh, 1);
+    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
+    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_mWH_MSB, &old_msb_mWh, 1);
+    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_LSB, &old_lsb_TV, 1);
     if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
+    HAL_Delay(1);
     ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_MSB, &old_msb_TV, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_LSB, &old_lsb_mWh, 1);
-    if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
-    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_MSB, &old_msb_mWh, 1);
-    if (ret != HAL_OK) return ret;
-    HAL_Delay(5);
-    ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_OFFSET_CHECKSUM,       &old_csum, 1);
-    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
 
     // 6) Calculate and write new values
-    newCsum = BQ27427_calcChecksum(old_csum, old_msb_DC, old_lsb_DC, old_lsb_CTTC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_mWh, old_lsb_mWh, old_msb_TV, old_lsb_TV, msb_DC, lsb_DC, lsb_CTTC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV, msb_mWh, lsb_mWh);
     ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_DC, 1);
     if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
     ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_DC, 1);
     if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
     ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_TAPER_RATE_LSB, &lsb_CTTC, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_DCT, 1);
+    HAL_Delay(1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_TAPER_RATE_MSB, &msb_CTTC, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_DCT, 1);
+    HAL_Delay(1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_LSB, &lsb_DCT, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_CCT, 1);
+    HAL_Delay(1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_MSB, &msb_DCT, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_CCT, 1);
+    HAL_Delay(1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_LSB, &lsb_CCT, 1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_QC, 1);
+    HAL_Delay(1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_MSB, &msb_CCT, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_QC, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_QUIT_CURRENT_LSB, &lsb_QC, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_mWh, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_QUIT_CURRENT_MSB, &msb_QC, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_mWh, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_LSB, &lsb_TV, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_LSB, &lsb_TV, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_TERMINATE_VOLTAGE_MSB, &msb_TV, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_DESIGN_CAP_MSB, &msb_TV, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_mWH_LSB, &lsb_mWh, 1);
+    HAL_Delay(1);
     if (ret != HAL_OK) return ret;
-    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_CHECKSUM,      &newCsum, 1);
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_mWH_MSB, &msb_mWh, 1);
+    HAL_Delay(1);
+    if (ret != HAL_OK) return ret;
+    HAL_Delay(1);
+
+    newCsum = BQ27427_calcChecksum(old_csum, old_msb_DC, old_lsb_DC, old_msb_CTTC, old_lsb_CTTC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_mWh, old_lsb_mWh, old_msb_TV, old_lsb_TV, msb_DC, lsb_DC, msb_CTTC, lsb_CTTC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV, msb_mWh, lsb_mWh);
+
+    ret = BQ27427_Write(sensor_BQ27427, BQ27427_OFFSET_CHECKSUM,&newCsum, 1);
     if (ret != HAL_OK) return ret;
 
     // 7) Soft-reset to exit CONFIG UPDATE
@@ -514,9 +551,61 @@ HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t 
     HAL_Delay(10);
 
     // Optional: re-seal
-    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_SEALED);
+//    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_SEALED);
 
     return HAL_OK;
+}
+
+HAL_StatusTypeDef BQ27427_SetChemistryProfile(BQ27427_t *sensor_BQ27427, uint8_t profile){
+	HAL_StatusTypeDef ret;
+	uint16_t flags;
+	uint8_t cheim_id;
+
+	BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_UNSEAL);
+    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_UNSEAL);
+
+
+    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_CHEM_ID);
+    HAL_Delay(1);
+	ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_CMD_CTRL_SUBCMD, &cheim_id, 2);
+	if (ret != HAL_OK) return ret;
+
+	BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_CFGUPDATE);
+    HAL_Delay(1);
+
+    /* 3) Wait for CONFIG UPDATE flag */
+	do {
+		flags = BQ27427_ReadFlags(sensor_BQ27427);
+	} while (!(flags & BQ27427_FLAG_CFGUPMODE));
+
+	switch (profile) {
+		case CHEM_A:
+			BQ27427_sendCmd(sensor_BQ27427, BQ27427_CHEMISTRY_PROFILE_A);
+			break;
+		case CHEM_B:
+			BQ27427_sendCmd(sensor_BQ27427, BQ27427_CHEMISTRY_PROFILE_B);
+			break;
+		case CHEM_C:
+			BQ27427_sendCmd(sensor_BQ27427, BQ27427_CHEMISTRY_PROFILE_C);
+			break;
+		default:
+			break;
+	}
+
+    HAL_Delay(1);
+	do {
+		flags = BQ27427_ReadFlags(sensor_BQ27427);
+	} while (!(flags & BQ27427_FLAG_CFGUPMODE));
+    HAL_Delay(1);
+
+	BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_SOFT_RESET);
+	HAL_Delay(1);
+
+	BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_CHEM_ID);
+	ret = BQ27427_ReadInternal(sensor_BQ27427, BQ27427_CMD_CTRL_SUBCMD, &cheim_id, 2);
+	if (ret != HAL_OK) return ret;
+
+	return HAL_OK;
 }
 
 /**
@@ -554,7 +643,7 @@ uint16_t BQ27427_GetDesignCapacity(BQ27427_t *sensor_BQ27427){
 	    HAL_Delay(10);
 
 	    // Optional: re-seal
-	    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_SEALED);
+//	    BQ27427_sendCmd(sensor_BQ27427, BQ27427_SUBCMD_SEALED);
 
 	    return densign_capacity;
 }

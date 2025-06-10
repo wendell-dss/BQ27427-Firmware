@@ -31,6 +31,7 @@
 // comandos de controle
 #define BQ27427_CMD_CTRL_SUBCMD     0x00
 #define BQ27427_SUBCMD_UNSEAL       0x8000
+#define BQ27427_SUBCMD_CHEM_ID      0x0008
 #define BQ27427_SUBCMD_CFGUPDATE    0x0013
 #define BQ27427_SUBCMD_SEALED       0x0020
 #define BQ27427_SUBCMD_SOFT_RESET   0x0042
@@ -45,15 +46,27 @@
 #define BQ27427_OFFSET_DESIGN_CAP_LSB  0x46
 #define BQ27427_OFFSET_DESIGN_CAP_MSB  0x47
 #define BQ27427_OFFSET_TAPER_RATE_LSB  0x55
+#define BQ27427_OFFSET_TAPER_RATE_MSB  0x56
 #define BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_LSB  0x40
 #define BQ27427_OFFSET_DSG_CURRENT_THRESHOLD_MSB  0x41
 #define BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_LSB  0x42
 #define BQ27427_OFFSET_CHG_CURRENT_THRESHOLD_MSB  0x43
 #define BQ27427_OFFSET_QUIT_CURRENT_LSB  0x44
 #define BQ27427_OFFSET_QUIT_CURRENT_MSB  0x45
+#define BQ27427_OFFSET_mWH_LSB  0x48
+#define BQ27427_OFFSET_mWH_MSB  0x49
 #define BQ27427_OFFSET_TERMINATE_VOLTAGE_LSB  0x4A
 #define BQ27427_OFFSET_TERMINATE_VOLTAGE_MSB  0x4B
 #define BQ27427_OFFSET_CHECKSUM        0x60
+
+// Chemistry Profile
+#define CHEM_A 0
+#define CHEM_B 1
+#define CHEM_C 2
+#define BQ27427_CHEMISTRY_PROFILE_A        0x30
+#define BQ27427_CHEMISTRY_PROFILE_B        0x31
+#define BQ27427_CHEMISTRY_PROFILE_C        0x32
+
 
 // flags
 #define BQ27427_FLAG_CFGUPMODE       (1U << 4)
@@ -102,6 +115,7 @@ uint16_t BQ27427_ReadFullChargeCapacityUnfiltered(BQ27427_t *sensor_BQ27427);
 uint16_t BQ27427_ReadFullChargeCapacityFiltered(BQ27427_t *sensor_BQ27427);
 uint16_t BQ27427_ReadStateOfChargeUnfiltered(BQ27427_t *sensor_BQ27427);
 uint16_t BQ27427_ReadDesignCapacity(BQ27427_t *sensor_BQ27427);
+HAL_StatusTypeDef BQ27427_SetChemistryProfile(BQ27427_t *sensor_BQ27427, uint8_t profile);
 HAL_StatusTypeDef BQ27427_SetDesignCapacity(BQ27427_t *sensor_BQ27427, uint16_t capacity_mAh, uint16_t mV);
 uint16_t BQ27427_GetDesignCapacity(BQ27427_t *sensor_BQ27427);
 

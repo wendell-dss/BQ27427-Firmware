@@ -120,6 +120,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   BQ27427_Init(&sensor, &hi2c1); // Inicializa o sensor
+//  BQ27427_SetChemistryProfile(&sensor, CHEM_B);
+//  BQ27427_SetDesignCapacity(&sensor, 100, 3500);
 
 void __attribute__((unused)) bq27427_set_design_capacity(uint16_t mAh)
 {
@@ -251,9 +253,49 @@ void __attribute__((unused)) bq27427_set_zerar_bit_OpConfig()
 	gauge_write(0x00, seal, 2);
 
 }
+void __attribute__((unused)) bq27427_mudar_perfil_quimico(){
+	uint8_t unseal[2] = {0x00, 0x80};
+	gauge_write(0x00, unseal, 2);
+	gauge_write(0x00, unseal, 2);
+
+	uint8_t subcmd[3] = { 0x00, 0x08, 0x00 };   // reg, LSB, MSB
+	gauge_write(0x00, &subcmd[1], 2);
+	uint8_t chem_id_raw[2];
+	gauge_read(0x00, chem_id_raw, 2);
+	uint16_t chem_id = chem_id_raw[0] | (chem_id_raw[1] << 8);   // 1202, 3142 ou 3230
+	(void) chem_id;
+	uint8_t cfg[2] = {0x13, 0x00};
+	gauge_write(0x00, cfg, 2);
+	HAL_Delay(1100);
+//
+	uint16_t flags;
+	do{
+		flags = BQ27427_ReadFlags(&sensor);
+	}while (!(flags & (1U << 4)));
+//
+	uint8_t chem_b[2] = {0x31, 0x00};
+	gauge_write(0x00, chem_b, 2);
+
+	uint8_t rst[2] = {0x42, 0x00};
+	gauge_write(0x00, rst, 2);
+	HAL_Delay(5);
+
+	do { flags = BQ27427_ReadFlags(&sensor);
+	} while ((flags & (1<<4)) != 0);
+
+	gauge_write(0x00, &subcmd[1], 2);
+	gauge_read(0x00, chem_id_raw, 2);
+	chem_id = chem_id_raw[0] | (chem_id_raw[1] << 8);   // 1202, 3142 ou 3230
+	(void) chem_id;
+
+//	uint8_t seal[2] = {0x20, 0x00};
+//	gauge_write(0x00, seal, 2);
+}
 
 void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t mV)
 {
+	bq27427_mudar_perfil_quimico();
+
 	uint8_t unseal[2] = {0x00, 0x80};
 	gauge_write(0x00, unseal, 2);
 	gauge_write(0x00, unseal, 2);
@@ -262,6 +304,7 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
 	uint8_t cfg[2] = {0x13, 0x00};
 	gauge_write(0x00, cfg, 2);
 	HAL_Delay(5);
+
 
     /*--- Esperar Flags()[4] = 1 ---*/
 	uint16_t flags;
@@ -274,17 +317,26 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
 	gauge_write(0x3E, &cls,  1);           /* DataClass = 0x40 */
 	gauge_write(0x3F, &zero, 1);           /* DataBlock = 0 */
 
-//	uint8_t old_csum, old_msb_mAhDC, old_lsb_mAhDC, old_msb_mV, old_lsb_mV, old_msb_mWh, old_lsb_mWh;
+
 	uint8_t old_csum, old_msb_DC, old_lsb_DC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_TV, old_lsb_TV;
     HAL_Delay(100);
 	gauge_read(0x60, &old_csum, 1);   // deve ser o mesmo checksum estável
+
+//	uint8_t old_lsb_Qmax, old_msb_Qmax;
+//	HAL_Delay(100);
+//	gauge_read(0x00, &old_lsb_Qmax, 1);
+//    HAL_Delay(100);
+//	gauge_read(0x01, &old_msb_Qmax, 1);
+
     HAL_Delay(100);
 	gauge_read(0x46, &old_lsb_DC, 1);
     HAL_Delay(100);
 	gauge_read(0x47, &old_msb_DC, 1);
     HAL_Delay(100);
     uint8_t old_lsb_CTTC;
+    uint8_t old_msb_CTTC;
 	gauge_read(0x55, &old_lsb_CTTC, 1);
+	gauge_read(0x56, &old_msb_CTTC, 1);
 //    HAL_Delay(100);
 //	gauge_read(0x56, &old_msb_CTTC, 1);
     HAL_Delay(100);
@@ -309,31 +361,36 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
     HAL_Delay(100);
 	gauge_read(0x4B, &old_msb_TV, 1);
 
-//    uint8_t temp = (uint8_t)((255u - old_csum - old_msb_mAh - old_lsb_mAh - old_msb_mV - old_lsb_mV - old_msb_mWh - old_lsb_mWh) % 256u);
-
-//    uint8_t msb_mAh, lsb_mAh, msb_mV, lsb_mV, msb_mWh, lsb_mWh;
 	uint8_t msb_DC, lsb_DC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV;
 
-    lsb_DC =  mAh       & 0xFF;
+//	uint8_t lsb_Qmax, msb_Qmax;
+//	lsb_Qmax = 0xD6;
+//	msb_Qmax = 0x00;
+//	gauge_write(0x00, &lsb_Qmax, 1);
+//	gauge_write(0x01, &msb_Qmax, 1);
+
+	lsb_DC =  mAh       & 0xFF;
     msb_DC = (mAh >> 8) & 0xFF;
 //	lsb_DC = 0x96;
 //	msb_DC = 0x00;
 	gauge_write(0x46, &lsb_DC, 1);
 	gauge_write(0x47, &msb_DC, 1);
 
-	uint8_t lsb_CTTC = 0xF;
+	uint8_t lsb_CTTC = 0xA;
+	uint8_t msb_CTTC = 0x00;
 	gauge_write(0x55, &lsb_CTTC, 1);
+	gauge_write(0x56, &msb_CTTC, 1);
 
-	lsb_DCT = 0xA7;
+	lsb_DCT = 0x2;
 	msb_DCT = 0x00;
 	gauge_write(0x40, &lsb_DCT, 1);
 	gauge_write(0x41, &msb_DCT, 1);
-	lsb_CCT = 0x64;
+	lsb_CCT = 0x4;
 	msb_CCT = 0x00;
 	gauge_write(0x42, &lsb_CCT, 1);
 	gauge_write(0x43, &msb_CCT, 1);
-	lsb_QC = 0xFA;
-	msb_QC = 0x00;
+	lsb_QC = 0x1;
+	msb_QC = 0x01;
 	gauge_write(0x44, &lsb_QC, 1);
 	gauge_write(0x45, &msb_QC, 1);
 	lsb_TV =  mV       & 0xFF;
@@ -343,41 +400,28 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
 	gauge_write(0x4A, &lsb_TV, 1);
 	gauge_write(0x4B, &msb_TV, 1);
 
-//    msb_mAh = (mAh >> 8) & 0xFF;
-//    lsb_mAh =  mAh       & 0xFF;
-//
-//    gauge_write(0x46, &lsb_mAh, 1);       // 0x04
-//    gauge_write(0x47, &msb_mAh, 1);       // 0xB0
-//
 	uint8_t lsb_mWh, msb_mWh;
-    uint16_t mWh = mAh*mV/1000;
+    uint16_t mWh = (mAh/100)*(mV/100);
 	lsb_mWh =  mWh       & 0xFF;
     msb_mWh = (mWh >> 8) & 0xFF;
 //
     gauge_write(0x48, &lsb_mWh, 1);       // 0x04
     gauge_write(0x49, &msb_mWh, 1);       // 0xB0
-//
-//    msb_mV = (mV >> 8) & 0xFF;
-//	lsb_mV =  mV       & 0xFF;
-//
-//    gauge_write(0x4A, &lsb_mV, 1);       // 0x04
-//    gauge_write(0x4B, &msb_mV, 1);       // 0xB0
 
     uint8_t old_sum = (0xFF - old_csum) & 0xFF;
-    uint8_t new_sum = (old_sum - old_msb_DC - old_lsb_DC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + msb_DC + lsb_DC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
-//    uint8_t new_sum = (old_sum - old_msb_mAh - old_lsb_mAh - old_msb_mV - old_lsb_mV - old_msb_mWh - old_lsb_mWh + msb_mAh + lsb_mAh + msb_mV + lsb_mV + msb_mWh + lsb_mWh) & 0xFF;
+//    uint8_t new_sum = (old_sum - old_msb_Qmax - old_lsb_Qmax - old_msb_DC - old_lsb_DC - old_msb_CTTC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + lsb_Qmax + msb_Qmax + msb_DC + lsb_DC + msb_CTTC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
+    uint8_t new_sum = (old_sum - old_msb_DC - old_lsb_DC - old_msb_CTTC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + msb_DC + lsb_DC + msb_CTTC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
 	uint8_t newCsum = (0xFF - new_sum) & 0xFF;
 
     gauge_write(0x60, &newCsum, 1);
-
-//    zero = 0x00;
-//    gauge_write(0x3F, &zero, 1);  // DataBlock = 0 → commit do bloco
-//    HAL_Delay(2);
 
     /*--- Esperar Flags()[4] = 1 ---*/
 	do { flags = BQ27427_ReadFlags(&sensor); }
 	while (!(flags & (1U<<4)));
     /*-----------------------------*/
+    uint8_t init[2] = {0x0C, 0x00};
+	gauge_write(0x00, init, 2);
+	HAL_Delay(5);
 
     uint8_t rst[2] = {0x42, 0x00};
 	gauge_write(0x00, rst, 2);
@@ -386,8 +430,8 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
 //	gauge_write(0x00, rst2, 2);
 //	HAL_Delay(5);
 
-	uint8_t seal[2] = {0x20, 0x00};
-	gauge_write(0x00, seal, 2);
+//	uint8_t seal[2] = {0x20, 0x00};
+//	gauge_write(0x00, seal, 2);
 
 }
 
@@ -403,7 +447,7 @@ void __attribute__((unused)) bq27427_shutdown(){
 	gauge_write(0x00, cmd_shutdown, 2);
 }
 
-//	bq27427_shutdown();
+
 //	uint8_t buf_status[2] = {0};
 ////	do{
 //		HAL_I2C_Mem_Read(
@@ -422,9 +466,6 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	}while ( (buf_status[0] & 0x01) == 0 );
 //
 //	HAL_Delay(100);
-//	uint8_t unseal[2] = {0x00, 0x80};
-//	gauge_write(0x00, unseal, 2);
-//	gauge_write(0x00, unseal, 2);
 //
 ////	uint8_t buf_ctrl[2];
 ////	// Envia Control(0x0000) para pedir CONTROL_STATUS
@@ -437,11 +478,11 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	// Agora buf_ctrl[1] (byte alto) contém o bit [SS] em sua posição
 ////	}while( (buf_ctrl[1] & 0x80) != 0 );
 //
-//	uint8_t chem_id[2] = {0x08, 0x00};
+////	uint8_t chem_id[2] = {0x08, 0x00};
 ////	gauge_write(0x00, chem_id, 2);
 ////	HAL_Delay(10);
 //	uint8_t chem_id_r[2];
-//	HAL_I2C_Mem_Read(&hi2c1,BQ27427_I2C_ADDR,0x0908,I2C_MEMADD_SIZE_8BIT,chem_id_r,2,HAL_MAX_DELAY);
+//	HAL_I2C_Mem_Read(&hi2c1,BQ27427_I2C_ADDR,0x0008,I2C_MEMADD_SIZE_8BIT,chem_id_r,2,HAL_MAX_DELAY);
 //	uint16_t newChemID;
 //	newChemID = chem_id_r[0] | (chem_id_r[1] << 8);
 //	(void)newChemID;
@@ -450,22 +491,11 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	do { control = BQ27427_Control(&sensor);
 ////	} while ((control & (1 << 0)) != 0 );
 //
-//	uint8_t cfg[2] = {0x13, 0x00};
-//	gauge_write(0x00, cfg, 2);
-//	HAL_Delay(1100);
-//
-//	uint16_t flags;
-//	do{
-//		flags = BQ27427_ReadFlags(&sensor);
-//	}while (!(flags & (1U << 4)));
-//
-//	uint8_t chem_b[2] = {0x32, 0x00};
-//	gauge_write(0x00, chem_b, 2);
-//	HAL_Delay(1000);
+//	HAL_Delay(10);
 //
 ////	uint8_t buf_status[2] = {0};
 ////	uint16_t control_status;
-////	do{
+//	do{
 //	HAL_I2C_Mem_Read(
 //	&hi2c1,
 //	BQ27427_I2C_ADDR, // HAL espera 7-bit<<1 para endereço 8-bit
@@ -479,11 +509,8 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	control_status = (uint16_t)(buf_status[0] | (buf_status[1] << 8));
 //	// Exemplo: verificar o bit ‘CHEMCHANGE’ (bit 0 do LSB):
 //	HAL_Delay(2);
-////	}while ( (buf_status[0] & 0x01) == 0 );
+//	}while ( (buf_status[0] & 0x01) == 0 );
 //
-//	uint8_t rst[2] = {0x42, 0x00};
-//	gauge_write(0x00, rst, 2);
-//	HAL_Delay(5);
 //
 ////	do{
 ////	HAL_I2C_Mem_Read(
@@ -501,10 +528,11 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	HAL_Delay(2);
 ////	}while ( (buf_status[0] & 0x01) == 0 );
 //
-//	/*--- Esperar Flags()[4] = 1 ---*/
-//	do { flags = BQ27427_ReadFlags(&sensor);
-//	} while ((flags & (1<<4)) != 0);
-//
+	/*--- Esperar Flags()[4] = 1 ---*/
+
+//	HAL_I2C_Mem_Read(&hi2c1,BQ27427_I2C_ADDR,0x0908,I2C_MEMADD_SIZE_8BIT,chem_id_r,2,HAL_MAX_DELAY);
+//	newChemID = chem_id_r[0] | (chem_id_r[1] << 8);
+//	(void)newChemID;
 //    /*-----------------------------*/
 ////    uint8_t rst2[2] = {0x41, 0x00};
 ////	gauge_write(0x00, rst2, 2);
@@ -513,8 +541,6 @@ void __attribute__((unused)) bq27427_shutdown(){
 ////	do { control = BQ27427_Control(&sensor);
 ////	} while ((control & (1 << 0)) != 0 );
 //
-//	uint8_t seal[2] = {0x20, 0x00};
-//	gauge_write(0x00, seal, 2);
 //
 //	// Subcomando 0x0008 → Read ChemID
 ////	HAL_I2C_Mem_Write(&hi2c1, BQ27427_I2C_ADDR, 0x00, I2C_MEMADD_SIZE_8BIT, (uint8_t[]){0x08, 0x00}, 2, HAL_MAX_DELAY);
@@ -532,7 +558,7 @@ void __attribute__((unused)) bq27427_shutdown(){
 //	} while ((control & (1 << 0)) != 0 );
 
 
-	bq27427_set_valores_padrao(150, 3500);
+//	bq27427_set_valores_padrao(100, 3500);
 
 	/* USER CODE END 2 */
 
@@ -563,7 +589,9 @@ void __attribute__((unused)) bq27427_shutdown(){
 //	  uint16_t nova_capacidade = BQ27427_SetDesignCapacity(&sensor, 150);
 //	  (void) nova_capacidade;
 	  uint8_t old_lsb_CTTC;
+	  uint8_t old_msb_CTTC;
 	  gauge_read(0x55, &old_lsb_CTTC, 1);
+	  gauge_read(0x56, &old_msb_CTTC, 1);
 	  uint16_t capacidade_da_bateria = BQ27427_GetDesignCapacity(&sensor);
 	  (void)capacidade_da_bateria;
 	  uint16_t nivel_da_bateria = BQ27427_ReadStateOfCharge(&sensor);
