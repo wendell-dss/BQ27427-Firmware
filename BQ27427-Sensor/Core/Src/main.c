@@ -74,7 +74,8 @@ static uint16_t gauge_read(uint8_t reg, uint8_t *data, uint8_t len){
     return HAL_I2C_Mem_Read(&hi2c1, BQ27427_I2C_ADDR, reg,
                             I2C_MEMADD_SIZE_8BIT, data, len, HAL_MAX_DELAY);
 }
-static uint16_t gauge_read16(uint16_t reg){
+
+static uint16_t __attribute__((unused)) gauge_read16(uint16_t reg){
 	uint8_t aRxBuffer[2];
 
     if (HAL_I2C_Mem_Read(&hi2c1, BQ27427_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT, aRxBuffer, 2, HAL_MAX_DELAY) != HAL_OK){
@@ -119,140 +120,10 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-  BQ27427_Init(&sensor, &hi2c1); // Inicializa o sensor
+  BQ27427_Init(&bq_sensor, &hi2c1); // Inicializa o sensor
 //  BQ27427_SetChemistryProfile(&sensor, CHEM_B);
 //  BQ27427_SetDesignCapacity(&sensor, 100, 3500);
 
-void __attribute__((unused)) bq27427_set_design_capacity(uint16_t mAh)
-{
-	/* -------- 1. Desbloquear (“unseal”) o gauge ---------------------------- */
-    uint8_t unseal[2] = {0x00, 0x80};
-    gauge_write(0x00, unseal, 2);           // primeira metade
-    gauge_write(0x00, unseal, 2);           // segunda metade
-
-	/* -------- 2. Entrar em CONFIG UPDATE mode ---------------------------- */
-    uint8_t cfg[2] = {0x13, 0x00};			//CONFIG UPDATE
-    gauge_write(0x00, cfg, 2);
-    HAL_Delay(1100);
-
-    // Depois, fique lendo Flags() (0x06/0x07) até que o bit [CFGUPMODE] seja 1 (pode levar ≤1 s)
-	uint16_t flags;
-    do{
-    	flags = BQ27427_ReadFlags(&sensor);
-    }while (!(flags & (1U << 4)));
-
-    /* -------- 3. Preparar o bloco de dados da RAM para escrita ------------- */
-    uint8_t zero = 0x00, cls = 0x52;
-    gauge_write(0x61, &zero, 1);            // BlockDataControl
-    gauge_write(0x3E, &cls, 1);             // DataBlockClass
-    gauge_write(0x3F, &zero, 1);            // DataBlock offset 0-31
-
-    /* -------- 4. Ler, escrever e recalcular checksum ------------- */
-	uint8_t old_csum, old_msb, old_lsb;
-    HAL_Delay(100);
-	gauge_read(0x60, &old_csum, 1);   // deve ser o mesmo checksum estável
-    HAL_Delay(100);
-	gauge_read(0x46, &old_msb, 1);   // deve ser 0xB0
-    HAL_Delay(100);
-	gauge_read(0x47, &old_lsb, 1);   // deve ser 0x04
-
-    uint8_t msb = (mAh >> 8) & 0xFF;
-    uint8_t lsb =  mAh       & 0xFF;
-
-    uint8_t sum_old_mod = (255u - old_csum) & 0xFF;
-	int16_t sum_new_mod = sum_old_mod - old_msb - old_lsb + msb + lsb;
-
-	// garanta wrap-around em 0–255:
-	sum_new_mod = (sum_new_mod & 0xFF);
-
-	uint8_t newCsum = 255u - (uint8_t)sum_new_mod;
-
-    /* -------- 4.1. Escreva o novo valor de Design Capacity ---------------------- */
-    gauge_write(0x46, &lsb, 1);       // 0x04
-    gauge_write(0x47, &msb, 1);       // 0xB0
-    gauge_write(0x60, &newCsum, 1);
-
-
-    /* -------- 5. Sai do CONFIG UPDATE ------------------------------ */
-    HAL_Delay(2000);
-    uint8_t rst[2] = {0x42, 0x00};
-    gauge_write(0x00, rst, 2);
-    HAL_Delay(2000);
-
-    /* Leitura da Flags referente a density capacity para confirmação visual se o valor foi realmente alterado  */
-    //Passo 1
-	gauge_write(0x00, unseal, 2);           // primeira metade
-	gauge_write(0x00, unseal, 2);           // segunda metade
-	//Passo 2
-	gauge_write(0x00, cfg, 2);
-	HAL_Delay(1100);
-	//Passo 3
-    zero = 0x00, cls = 0x52;
-	gauge_write(0x61, &zero, 1);            // BlockDataControl
-	gauge_write(0x3E, &cls, 1);             // DataBlockClass
-	gauge_write(0x3F, &zero, 1);            // DataBlock offset 0-31
-
-	uint16_t new_cap_lib = gauge_read16(0x4746);
-	(void)new_cap_lib;
-
-	HAL_Delay(2000);
-	gauge_write(0x00, rst, 2);
-
-    /* Leitura da Flags referente a density capacity para confirmação visual se o valor foi realmente alterado  */
-
-    /* -------- 6. selar novamente (Opcional) ------------------------------ */
-	HAL_Delay(2000);
-    uint8_t seal[2] = {0x20, 0x00};
-	gauge_write(0x00, seal, 2);
-
-
-}
-
-void __attribute__((unused)) bq27427_set_zerar_bit_OpConfig()
-{
-	/* -------- 1. UNSEAL --------------------------------------------------- */
-	uint8_t unseal[2] = {0x00, 0x80};
-	gauge_write(0x00, unseal, 2);
-	gauge_write(0x00, unseal, 2);
-
-	/* -------- 2. CONFIG UPDATE ------------------------------------------- */
-	uint8_t cfg[2] = {0x13, 0x00};
-	gauge_write(0x00, cfg, 2);
-	HAL_Delay(5);
-	uint16_t flags;
-	do { flags = BQ27427_ReadFlags(&sensor); }
-	while (!(flags & (1U<<4)));            /* espera CFGUPMODE = 1 */
-
-	/* -------- 3. Seleciona bloco Configuration (ID 0x40) ----------------- */
-	uint8_t zero = 0x00, cls = 0x40;
-	gauge_write(0x61, &zero, 1);           /* BlockDataControl */
-	gauge_write(0x3E, &cls,  1);           /* DataClass = 0x40 */
-	gauge_write(0x3F, &zero, 1);           /* DataBlock = 0 */
-
-	/* -------- 4. Lê OpConfig-LSB e checksum ------------------------------ */
-	uint8_t oldOpCfg, oldCsum;
-	gauge_read (0x40, &oldOpCfg, 1);       /* OpConfig-LSB */
-	gauge_read (0x60, &oldCsum, 1);        /* checksum     */
-
-	/* -------- 5. Zera BIE (bit-5) ---------------------------------------- */
-	uint8_t newOpCfg = oldOpCfg & ~(1<<5);  /* limpa BIE     */
-	uint8_t delta    = (uint8_t)((oldOpCfg - newOpCfg) & 0xFF);
-	uint8_t newCsum  = (uint8_t)((oldCsum + delta)   & 0xFF);
-
-	/* -------- 6. Grava novo byte + novo checksum ------------------------- */
-	gauge_write(0x40, &newOpCfg, 1);       /* primeiro o dado */
-	gauge_write(0x60, &newCsum,  1);       /* depois o csum   */
-
-	/* -------- 7. SOFT_RESET para sair de CFGUP --------------------------- */
-	uint8_t rst[2] = {0x42, 0x00};
-	gauge_write(0x00, rst, 2);
-	HAL_Delay(5);
-
-	/* -------- 8. (Opcional) selar novamente ------------------------------ */
-	uint8_t seal[2] = {0x20, 0x00};
-	gauge_write(0x00, seal, 2);
-
-}
 void __attribute__((unused)) bq27427_mudar_perfil_quimico(){
 	uint8_t unseal[2] = {0x00, 0x80};
 	gauge_write(0x00, unseal, 2);
@@ -266,7 +137,7 @@ void __attribute__((unused)) bq27427_mudar_perfil_quimico(){
 	(void) chem_id;
 	uint8_t cfg[2] = {0x13, 0x00};
 	gauge_write(0x00, cfg, 2);
-	HAL_Delay(1100);
+//	HAL_Delay(1100);
 //
 	uint16_t flags;
 	do{
@@ -317,101 +188,113 @@ void __attribute__((unused)) bq27427_set_valores_padrao(uint16_t mAh, uint16_t m
 	gauge_write(0x3E, &cls,  1);           /* DataClass = 0x40 */
 	gauge_write(0x3F, &zero, 1);           /* DataBlock = 0 */
 
+    uint8_t newCsum, old_csum, old_msb_DC, old_lsb_DC, old_lsb_CTTC, old_msb_CTTC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_mWh, old_lsb_mWh, old_msb_TV, old_lsb_TV, msb_DC, lsb_DC, msb_CTTC, lsb_CTTC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV, msb_mWh, lsb_mWh;
 
-	uint8_t old_csum, old_msb_DC, old_lsb_DC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_TV, old_lsb_TV;
-    HAL_Delay(100);
+//	uint8_t old_csum, old_msb_DC, old_lsb_DC, old_msb_DCT, old_lsb_DCT, old_msb_CCT, old_lsb_CCT, old_msb_QC, old_lsb_QC, old_msb_TV, old_lsb_TV;
+    HAL_Delay(1);
 	gauge_read(0x60, &old_csum, 1);   // deve ser o mesmo checksum estável
 
 //	uint8_t old_lsb_Qmax, old_msb_Qmax;
-//	HAL_Delay(100);
+//	HAL_Delay(1);
 //	gauge_read(0x00, &old_lsb_Qmax, 1);
-//    HAL_Delay(100);
+//    HAL_Delay(1);
 //	gauge_read(0x01, &old_msb_Qmax, 1);
 
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x46, &old_lsb_DC, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x47, &old_msb_DC, 1);
-    HAL_Delay(100);
-    uint8_t old_lsb_CTTC;
-    uint8_t old_msb_CTTC;
+    HAL_Delay(1);
+//    uint8_t old_lsb_CTTC;
+//    uint8_t old_msb_CTTC;
 	gauge_read(0x55, &old_lsb_CTTC, 1);
 	gauge_read(0x56, &old_msb_CTTC, 1);
-//    HAL_Delay(100);
+//    HAL_Delay(1);
 //	gauge_read(0x56, &old_msb_CTTC, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x40, &old_lsb_DCT, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x41, &old_msb_DCT, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x42, &old_lsb_CCT, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x43, &old_msb_CCT, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x44, &old_lsb_QC, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x45, &old_msb_QC, 1);
-	uint8_t old_lsb_mWh, old_msb_mWh;
-    HAL_Delay(100);
+//	uint8_t old_lsb_mWh, old_msb_mWh;
+    HAL_Delay(1);
 	gauge_read(0x48, &old_lsb_mWh, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x49, &old_msb_mWh, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x4A, &old_lsb_TV, 1);
-    HAL_Delay(100);
+    HAL_Delay(1);
 	gauge_read(0x4B, &old_msb_TV, 1);
 
-	uint8_t msb_DC, lsb_DC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV;
+//	uint8_t msb_DC, lsb_DC, msb_DCT, lsb_DCT, msb_CCT, lsb_CCT, msb_QC, lsb_QC, msb_TV, lsb_TV;
 
-//	uint8_t lsb_Qmax, msb_Qmax;
-//	lsb_Qmax = 0xD6;
-//	msb_Qmax = 0x00;
-//	gauge_write(0x00, &lsb_Qmax, 1);
-//	gauge_write(0x01, &msb_Qmax, 1);
+    lsb_DC = (uint8_t)(mAh & 0xFF);
+    msb_DC = (uint8_t)((mAh >> 8) & 0xFF);
+	uint16_t taper_Rate = mAh / 10;
+    lsb_CTTC =  taper_Rate       & 0xFF;
+	msb_CTTC = (taper_Rate >> 8) & 0xFF;
+    uint16_t chg_Current_Thr = mAh / 10;
+	lsb_CCT =  chg_Current_Thr       & 0xFF;
+    msb_CCT = (chg_Current_Thr >> 8) & 0xFF;
+    uint16_t dsg_Current_Thr = mAh / 16.7;
+	lsb_DCT =  dsg_Current_Thr       & 0xFF;
+    msb_DCT = (dsg_Current_Thr >> 8) & 0xFF;
+	lsb_TV =  mV       & 0xFF;
+    msb_TV = (mV >> 8) & 0xFF;
+    uint16_t quit_current = mAh / 25;
+	lsb_QC =  quit_current       & 0xFF;
+    msb_QC = (quit_current >> 8) & 0xFF;
+    uint16_t mWh = (mAh/100)*(mV/100);
+    lsb_mWh =  mWh       & 0xFF;
+    msb_mWh = (mWh >> 8) & 0xFF;
 
-	lsb_DC =  mAh       & 0xFF;
-    msb_DC = (mAh >> 8) & 0xFF;
+//	lsb_DC =  mAh       & 0xFF;
+//    msb_DC = (mAh >> 8) & 0xFF;
 //	lsb_DC = 0x96;
 //	msb_DC = 0x00;
 	gauge_write(0x46, &lsb_DC, 1);
 	gauge_write(0x47, &msb_DC, 1);
 
-	uint8_t lsb_CTTC = 0xA;
-	uint8_t msb_CTTC = 0x00;
+//	uint8_t lsb_CTTC = 0xA;
+//	uint8_t msb_CTTC = 0x00;
 	gauge_write(0x55, &lsb_CTTC, 1);
 	gauge_write(0x56, &msb_CTTC, 1);
 
-	lsb_DCT = 0x2;
-	msb_DCT = 0x00;
+//	lsb_DCT = 0x2;
+//	msb_DCT = 0x00;
 	gauge_write(0x40, &lsb_DCT, 1);
 	gauge_write(0x41, &msb_DCT, 1);
-	lsb_CCT = 0x4;
-	msb_CCT = 0x00;
+//	lsb_CCT = 0x4;
+//	msb_CCT = 0x00;
 	gauge_write(0x42, &lsb_CCT, 1);
 	gauge_write(0x43, &msb_CCT, 1);
-	lsb_QC = 0x1;
-	msb_QC = 0x01;
+//	lsb_QC = 0x1;
+//	msb_QC = 0x01;
 	gauge_write(0x44, &lsb_QC, 1);
 	gauge_write(0x45, &msb_QC, 1);
-	lsb_TV =  mV       & 0xFF;
-    msb_TV = (mV >> 8) & 0xFF;
-//	lsb_TV = 0xAC;
-//	msb_TV = 0x0D;
+//	lsb_TV =  mV       & 0xFF;
+//    msb_TV = (mV >> 8) & 0xFF;
 	gauge_write(0x4A, &lsb_TV, 1);
 	gauge_write(0x4B, &msb_TV, 1);
 
-	uint8_t lsb_mWh, msb_mWh;
-    uint16_t mWh = (mAh/100)*(mV/100);
-	lsb_mWh =  mWh       & 0xFF;
-    msb_mWh = (mWh >> 8) & 0xFF;
-//
+//	uint8_t lsb_mWh, msb_mWh;
+//    uint16_t mWh = (mAh/100)*(mV/100);
+//	lsb_mWh =  mWh       & 0xFF;
+//    msb_mWh = (mWh >> 8) & 0xFF;
+
     gauge_write(0x48, &lsb_mWh, 1);       // 0x04
     gauge_write(0x49, &msb_mWh, 1);       // 0xB0
 
     uint8_t old_sum = (0xFF - old_csum) & 0xFF;
-//    uint8_t new_sum = (old_sum - old_msb_Qmax - old_lsb_Qmax - old_msb_DC - old_lsb_DC - old_msb_CTTC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + lsb_Qmax + msb_Qmax + msb_DC + lsb_DC + msb_CTTC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
     uint8_t new_sum = (old_sum - old_msb_DC - old_lsb_DC - old_msb_CTTC - old_lsb_CTTC - old_msb_DCT - old_lsb_DCT - old_msb_CCT - old_lsb_CCT - old_msb_QC - old_lsb_mWh - old_msb_mWh - old_lsb_QC - old_msb_TV - old_lsb_TV + msb_DC + lsb_DC + msb_CTTC + lsb_CTTC + msb_DCT + lsb_DCT + msb_CCT + lsb_CCT + msb_QC + lsb_QC + msb_TV + lsb_TV + msb_mWh + lsb_mWh) & 0xFF;
-	uint8_t newCsum = (0xFF - new_sum) & 0xFF;
+	newCsum = (0xFF - new_sum) & 0xFF;
 
     gauge_write(0x60, &newCsum, 1);
 
@@ -446,7 +329,6 @@ void __attribute__((unused)) bq27427_shutdown(){
 	uint8_t cmd_shutdown[2] = { 0x1C, 0x00 };
 	gauge_write(0x00, cmd_shutdown, 2);
 }
-
 
 //	uint8_t buf_status[2] = {0};
 ////	do{
@@ -592,26 +474,26 @@ void __attribute__((unused)) bq27427_shutdown(){
 	  uint8_t old_msb_CTTC;
 	  gauge_read(0x55, &old_lsb_CTTC, 1);
 	  gauge_read(0x56, &old_msb_CTTC, 1);
-	  uint16_t capacidade_da_bateria = BQ27427_GetDesignCapacity(&sensor);
+	  uint16_t capacidade_da_bateria = BQ27427_GetDesignCapacity(&bq_sensor);
 	  (void)capacidade_da_bateria;
-	  uint16_t nivel_da_bateria = BQ27427_ReadStateOfCharge(&sensor);
+	  uint16_t nivel_da_bateria = BQ27427_ReadStateOfCharge(&bq_sensor);
 	  (void)nivel_da_bateria;
-	  uint16_t voltage = BQ27427_ReadVoltage(&sensor);
+	  uint16_t voltage = BQ27427_ReadVoltage(&bq_sensor);
 	  (void)voltage;
-	  uint16_t current = BQ27427_ReadAverageCurrent(&sensor);
+	  uint16_t current = BQ27427_ReadAverageCurrent(&bq_sensor);
 	  (void)current;
-      uint16_t NominalAvailableCapacity = BQ27427_ReadNominalAvailableCapacity(&sensor);
+      uint16_t NominalAvailableCapacity = BQ27427_ReadNominalAvailableCapacity(&bq_sensor);
       (void)NominalAvailableCapacity;
-      uint16_t FullAvailableCapacity = BQ27427_ReadFullAvailableCapacity(&sensor);
+      uint16_t FullAvailableCapacity = BQ27427_ReadFullAvailableCapacity(&bq_sensor);
       (void)FullAvailableCapacity;
 //      uint8_t bat_ins[] = {0x0C,0x00};
 //      gauge_write(0x00, bat_ins, 2);
 //      HAL_Delay(10);
-      uint16_t RemainingCapacity = BQ27427_ReadRemainingCapacity(&sensor);
+      uint16_t RemainingCapacity = BQ27427_ReadRemainingCapacity(&bq_sensor);
       (void)RemainingCapacity;
-      uint16_t FullChargeCapacity = BQ27427_ReadFullChargeCapacity(&sensor);
+      uint16_t FullChargeCapacity = BQ27427_ReadFullChargeCapacity(&bq_sensor);
       (void)FullChargeCapacity;
-      uint16_t RemainingCapacityUnfiltered = BQ27427_ReadRemainingCapacityUnfiltered(&sensor);
+      uint16_t RemainingCapacityUnfiltered = BQ27427_ReadRemainingCapacityUnfiltered(&bq_sensor);
       (void)RemainingCapacityUnfiltered;
 
 //      uint16_t write_Design_Capacity = BQ27427_SetDesignCapacity(&sensor, 150);
